@@ -1,5 +1,0 @@
-
-
-
-def classifier(keypoints):
-    pass
