@@ -95,14 +95,12 @@ def create_model(image_shape=IMG_SIZE, data_augmentation=data_augmenter()):
 
     input_shape = image_shape + (3,)
 
-    ### START CODE HERE
-
     base_model = tf.keras.applications.MobileNet(input_shape=input_shape,
-                                                   include_top=False,  # <== Important!!!!
+                                                   include_top=False,
                                                    weights='imagenet')  # From imageNet
 
     # freeze the base model by making it non trainable
-    # base_model.trainable = False
+    base_model.trainable = False
 
     # create the input layer (Same as the imageNetv2 input size)
     inputs = tf.keras.Input(shape=input_shape, batch_size=1)
@@ -124,8 +122,6 @@ def create_model(image_shape=IMG_SIZE, data_augmentation=data_augmenter()):
 
     # use a prediction layer with one neuron (as a binary classifier only needs one)
     outputs = tfl.Dense(10)(x)
-
-    ### END CODE HERE
 
     model = tf.keras.Model(inputs, outputs)
 
