@@ -1,36 +1,73 @@
-print("============================== Smart Home Project ==============================\n")
-print("Starts import libraries")
-import cvzone
-from HandDetector.hand_detector import extract_hand_roi
-import cv2
-import keras
-import numpy as np
-import time
-import tensorflow as tf
-import Jetson.GPIO as GPIO
-print("All the libraries were successfully imported\n")
+print("================================================================================")
+print("============================== Smart Home Project ==============================")
+print("================================================================================\n")
 
+print("############################### Import ###############################")
+
+print("Imports opencv's hand detector...")
+from cvzone.HandTrackingModule import HandDetector
+print("Imports opencv...")
+import cv2
+print("Imports keras...")
+import keras
+print("Imports numpy...")
+import numpy as np
+print("Imports Jetson.GPIO lib...")
+import Jetson.GPIO as GPIO
+print("Imports enum...")
+from enum import Enum
+
+print("########################### Import - Done ############################\n")
+
+# Used for debugging. Allows to see the captured image and the raw classification
 DEBUG = False
 
-from enum import Enum
+
+# Used for controlling the leds with clear representation
 class LedState(Enum):
     OFF = 0
     ON = 1
 
 
+# Creates a global instance of the detector
+# The detection confidence was initialized to 0.8 to improve the accuracy
+detector = HandDetector(detectionCon=0.8, maxHands=2)
+
+
+# Used for detecting the hand in the captured image
+def extract_hand_roi(image):
+    # The actual detection op
+    hands = detector.findHands(image, draw=False)  # without draw
+
+    # If there is no hand detection, return None
+    if not hands:
+        return None
+
+    # Hand 1
+    hand1 = hands[0]
+    lmList1 = hand1["lmList"]  # List of 21 Landmark points
+    bbox1 = hand1["bbox"]  # Bounding box info x,y,w,h
+
+    return bbox1, lmList1
+
+
+# Normalization function
+# We want to limit the MobileNet-V2 output to the range-[0,1]
+# so we could filter the classifications as probabilities
 def normalize_confidence(vector):
     min_val = np.min(vector)
-    if(min_val < 0):
+    if min_val < 0: # We want to ensure the whole vector is positive
         vector = vector + abs(min_val)
     total_sum = vector.sum()
     return vector / total_sum
 
 
 def main():
+    print("####################### SmartHome application ########################")
     print("System initialization")
-    cap = cv2.VideoCapture(0)
-    last_classification = -1
-    # Set up the GPIO
+    cap = cv2.VideoCapture(0) # choose camera number 0(the default one)
+
+    # Set up the GPIO according to the chosen hardware connections
     GPIO.setmode(GPIO.BOARD)
     GPIO.setup(7, GPIO.OUT, initial=GPIO.LOW)  # blue led
     GPIO.setup(13, GPIO.OUT, initial=GPIO.LOW) # yellow led
@@ -38,13 +75,15 @@ def main():
     GPIO.setup(26, GPIO.OUT, initial=GPIO.LOW) # green led
     GPIO.setup(33, GPIO.OUT, initial=GPIO.LOW) # white led
 
+    # Initialize all the leds to OFF position
     blue = LedState.OFF
     yellow = LedState.OFF
     red = LedState.OFF
     green = LedState.OFF
     white = LedState.OFF
-    
-    model = keras.models.load_model('Classification/model/MobileNet')
+
+    # load the trained model
+    model = keras.models.load_model('model/MobileNet')
     print("MobileNet model was successfully loaded!")
     print("Initialization was ended successfully\n")
     
@@ -81,7 +120,7 @@ def main():
             inference_results = normalize_confidence(model(img).numpy())
             if DEBUG:
                 print(f"classification-{np.argmax(inference_results)}, confidence-{np.max(inference_results)}")
-            if np.max(inference_results) < 0.25:
+            if np.max(inference_results) < 0.25 and np.argmax(inference_results) != 2:
                 continue
             classification = np.argmax(inference_results)
             if last_classification == classification:
@@ -102,7 +141,7 @@ def main():
                 print("Turning on the blue led")
                 GPIO.output(7, GPIO.HIGH)
                 blue = LedState.ON
-            elif classification == 2 and yellow == LedState.OFF:
+            elif classification == 2 and np.max(inference_results) > 0.2 and yellow == LedState.OFF: # This classification is more problematic
                 print("Turning on the yellow led")
                 GPIO.output(13, GPIO.HIGH)
                 yellow = LedState.ON
